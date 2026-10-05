@@ -1,6 +1,5 @@
 package dev.ultracraft;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -19,6 +18,8 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.client.gui.screens.options.OptionsSubScreen;
 import net.minecraft.network.chat.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Ultracraft's settings: which enemies come (Minecraft's monsters, ULTRAKILL's, its bosses), what breaks blocks, how
@@ -44,16 +45,25 @@ public final class UcSettingsScreen extends OptionsSubScreen {
 	/** What ULTRAKILL said its settings are (UKPREFS), for the ones Ultracraft hasn't set itself. */
 	static final Map<String, String> reported = new HashMap<>();
 
+	private static final Logger LOGGER = LoggerFactory.getLogger("Ultracraft");
+
 	public UcSettingsScreen(Screen last) {
 		super(last, Minecraft.getInstance().options, Component.literal("Ultracraft Settings"));
+		LOGGER.info("Settings screen opened");
 	}
 
 	/** The "Ultracraft" button on the pause menu, the title screen and Minecraft's Options. */
 	static void register() {
 		ScreenEvents.AFTER_INIT.register((mc, screen, w, h) -> {
 			if (screen instanceof PauseScreen || screen instanceof OptionsScreen || screen instanceof TitleScreen) {
-				Screens.getButtons(screen).add(Button.builder(Component.literal("Ultracraft..."), b -> mc.setScreen(new UcSettingsScreen(screen)))
-					.bounds(4, 4, 90, 20).tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Ultracraft and ULTRAKILL settings"))).build());
+				// next frame + catch: opening must never fail silently (a broken screen used to look like a dead button)
+				Screens.getButtons(screen).add(Button.builder(Component.literal("Ultracraft..."), b -> mc.execute(() -> {
+					try {
+						mc.setScreen(new UcSettingsScreen(screen));
+					} catch (Throwable t) {
+						LOGGER.error("Could not open the Ultracraft settings screen", t);
+					}
+				})).bounds(4, 4, 90, 20).tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal("Ultracraft and ULTRAKILL settings"))).build());
 			}
 		});
 	}
@@ -101,20 +111,28 @@ public final class UcSettingsScreen extends OptionsSubScreen {
 		list.addSmall(uk.toArray(new OptionInstance[0]));
 	}
 
+	/** The folder button, held so the dialog can disable it while it is open. */
+	private Button folderButton;
+
 	@Override
 	protected void init() {
 		super.init();
-		// the folder ULTRAKILL runs from: shows the saved path, click to pick another (no Steam involved)
-		addRenderableWidget(Button.builder(Component.literal(folderLabel()), b -> pickFolder())
-			.bounds(4, height - 24, 250, 20)
+		// the folder ULTRAKILL runs from: click to pick another (no Steam involved). Sits on the footer row, left of
+		// Minecraft's Done button (200 wide, centered), so neither widget eats the other's clicks
+		int doneLeft = (width - 200) / 2;
+		int bw = Math.max(90, Math.min(250, doneLeft - 8));
+		folderButton = addRenderableWidget(Button.builder(Component.literal(folderLabel()), b -> pickFolder())
+			.bounds(4, height - 24, bw, 20)
 			.tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(folderTip()))).build());
 	}
 
-	/** The saved ULTRAKILL folder, shortened to fit the button. */
+	/** The saved ULTRAKILL folder, shortened to fit the button (the tooltip always shows the full path). */
 	private static String folderLabel() {
 		String path = UkPath.saved();
 		if (path == null) return "ULTRAKILL folder...";
-		return path.length() > 36 ? "..." + path.substring(path.length() - 33) : path;
+		int cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+		String name = cut >= 0 && cut + 1 < path.length() ? path.substring(cut + 1) : path;
+		return name.length() > 22 ? "ULTRAKILL folder..." : "..." + name;
 	}
 
 	private static String folderTip() {
@@ -123,12 +141,27 @@ public final class UcSettingsScreen extends OptionsSubScreen {
 			: "ULTRAKILL runs from: " + path + " (click to pick another folder).";
 	}
 
-	/** Opens the folder dialog (saved for the launcher and every later start) and reopens the screen with the new path. */
-	private static void pickFolder() {
-		File exe = UkPath.pickAndSave(); // blocks while the dialog is open
-		if (exe == null) return;
+	/**
+	 * Opens the folder dialog off the game's thread: Minecraft keeps rendering and the dialog (always on top) shows
+	 * above the fullscreen game. The button says so while it waits, and the screen refreshes once a folder is chosen.
+	 */
+	private void pickFolder() {
+		if (folderButton == null || !folderButton.active) return;
+		folderButton.active = false;
+		folderButton.setMessage(Component.literal("Choosing folder..."));
+		LOGGER.info("Folder dialog opened");
 		Minecraft mc = Minecraft.getInstance();
-		mc.setScreen(new UcSettingsScreen(mc.screen));
+		Screen parent = this.lastScreen;
+		UkPath.pickAsync(exe -> mc.execute(() -> {
+			if (mc.screen != this) return; // the player closed the screen meanwhile; the path is saved either way
+			if (exe != null) {
+				LOGGER.info("Folder chosen: {}", exe.getParentFile());
+				mc.setScreen(new UcSettingsScreen(parent));
+			} else {
+				folderButton.active = true;
+				folderButton.setMessage(Component.literal(folderLabel()));
+			}
+		}));
 	}
 
 	@Override
