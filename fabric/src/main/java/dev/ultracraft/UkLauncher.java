@@ -1,8 +1,6 @@
 package dev.ultracraft;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStreamReader;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -11,9 +9,11 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Minecraft started from the normal launcher brings ULTRAKILL along: as soon as Minecraft is up, ULTRAKILL starts
- * through Steam with -ultracraft (its window hidden, the Sandbox loading in the background, waiting for a world), and
- * closing Minecraft closes the ULTRAKILL it started. An ULTRAKILL already running is used as it is. The "Start
- * ULTRAKILL" setting (or -Dultracraft.noLaunch, which the test launcher passes) turns this off.
+ * straight from the folder the user chose (its window hidden, the Sandbox loading in the background, waiting for a
+ * world), and closing Minecraft closes the ULTRAKILL it started. An ULTRAKILL already running is used as it is. The
+ * "Start ULTRAKILL" setting (or -Dultracraft.noLaunch, which the test launcher passes) turns this off.
+ * Steam plays no part: on the first run a dialog asks for the ULTRAKILL folder once (UkPath), and every later start
+ * goes straight to ULTRAKILL.exe in that folder.
  */
 final class UkLauncher {
 	private static final Logger LOG = LoggerFactory.getLogger("ultracraft");
@@ -36,15 +36,16 @@ final class UkLauncher {
 			LOG.info("ULTRAKILL is already running");
 			return;
 		}
-		String steam = steamExe();
-		if (steam == null) {
-			LOG.warn("Steam not found: start ULTRAKILL yourself (with the UltraBridge plugin)");
+		File exe = UkPath.findOrAsk();
+		if (exe == null) {
+			LOG.warn("no ULTRAKILL folder chosen: start ULTRAKILL yourself (with the UltraBridge plugin)");
 			return;
 		}
 		try {
-			new ProcessBuilder(steam, "-applaunch", "1229490", "-ultracraft", "-screen-fullscreen", "0", "-screen-width", "1280", "-screen-height", "720").start();
+			new ProcessBuilder(exe.getAbsolutePath(), "-ultracraft", "-screen-fullscreen", "0", "-screen-width", "1280", "-screen-height", "720")
+				.directory(exe.getParentFile()).start();
 			started = true;
-			LOG.info("starting ULTRAKILL through {}", steam);
+			LOG.info("starting ULTRAKILL at {}", exe);
 		} catch (Exception e) {
 			LOG.warn("couldn't start ULTRAKILL: {}", e.toString());
 		}
@@ -62,25 +63,5 @@ final class UkLauncher {
 				p.destroy();
 			}
 		});
-	}
-
-	/** Steam's own record of where it is (HKCU\Software\Valve\Steam SteamExe), or the usual place. */
-	private static String steamExe() {
-		try {
-			Process p = new ProcessBuilder("reg", "query", "HKCU\\Software\\Valve\\Steam", "/v", "SteamExe").redirectErrorStream(true).start();
-			try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-				String line;
-				while ((line = r.readLine()) != null) {
-					int i = line.indexOf("REG_SZ");
-					if (line.contains("SteamExe") && i >= 0) {
-						String path = line.substring(i + 6).trim().replace('/', '\\');
-						if (new File(path).isFile()) return path;
-					}
-				}
-			}
-		} catch (Exception ignored) {
-		}
-		String fallback = "C:\\Program Files (x86)\\Steam\\steam.exe";
-		return new File(fallback).isFile() ? fallback : null;
 	}
 }

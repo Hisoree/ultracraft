@@ -45,7 +45,7 @@ public final class UltracraftConfig {
 	public static boolean enemyBlockDamage = true;
 	/** How long ULTRAKILL's impact frames (hitstop) last, 0.1x to 3x. */
 	public static float impactFrames = 1f;
-	/** Starting Minecraft starts ULTRAKILL too (through Steam), and closing Minecraft closes it. */
+	/** Starting Minecraft starts ULTRAKILL too (straight from the folder chosen in UkPath), and closing Minecraft closes it. */
 	public static boolean launchUltrakill = true;
 	/** The OP Shop: Power goes on to 1500% and blast sizes to 1500% (more levels on the Upgrades page). */
 	public static boolean opShop = false;

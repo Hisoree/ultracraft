@@ -1,5 +1,6 @@
 package dev.ultracraft;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -93,11 +94,41 @@ public final class UcSettingsScreen extends OptionsSubScreen {
 				}),
 			bool("Sharp Shop Screen", "Using a shop, ULTRAKILL draws at full resolution so the text is sharp (costs frames while you use it).",
 				UltracraftConfig.sharpShop, v -> UltracraftConfig.sharpShop = v),
-			bool("Start ULTRAKILL", "Starting Minecraft starts ULTRAKILL too (through Steam), and closing Minecraft closes it.", UltracraftConfig.launchUltrakill,
+			bool("Start ULTRAKILL", "Starting Minecraft starts ULTRAKILL too (straight from the folder you chose), and closing Minecraft closes it.", UltracraftConfig.launchUltrakill,
 				v -> UltracraftConfig.launchUltrakill = v));
 		List<OptionInstance<?>> uk = new ArrayList<>();
 		for (UkPref p : UK_PREFS) uk.add(ukOption(p));
 		list.addSmall(uk.toArray(new OptionInstance[0]));
+	}
+
+	@Override
+	protected void init() {
+		super.init();
+		// the folder ULTRAKILL runs from: shows the saved path, click to pick another (no Steam involved)
+		addRenderableWidget(Button.builder(Component.literal(folderLabel()), b -> pickFolder())
+			.bounds(4, height - 24, 250, 20)
+			.tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(folderTip()))).build());
+	}
+
+	/** The saved ULTRAKILL folder, shortened to fit the button. */
+	private static String folderLabel() {
+		String path = UkPath.saved();
+		if (path == null) return "ULTRAKILL folder...";
+		return path.length() > 36 ? "..." + path.substring(path.length() - 33) : path;
+	}
+
+	private static String folderTip() {
+		String path = UkPath.saved();
+		return path == null ? "No ULTRAKILL folder chosen yet: click to pick the one containing ULTRAKILL.exe."
+			: "ULTRAKILL runs from: " + path + " (click to pick another folder).";
+	}
+
+	/** Opens the folder dialog (saved for the launcher and every later start) and reopens the screen with the new path. */
+	private static void pickFolder() {
+		File exe = UkPath.pickAndSave(); // blocks while the dialog is open
+		if (exe == null) return;
+		Minecraft mc = Minecraft.getInstance();
+		mc.setScreen(new UcSettingsScreen(mc.screen));
 	}
 
 	@Override

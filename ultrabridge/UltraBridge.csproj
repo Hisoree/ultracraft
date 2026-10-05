@@ -6,7 +6,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>disable</Nullable>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
-    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\ULTRAKILL</GameDir>
+    <!-- the user's own ULTRAKILL folder: -p:GameDir="..." or the ULTRAKILL_DIR environment variable (no Steam path assumed) -->
+    <GameDir Condition="'$(GameDir)' == ''">$(ULTRAKILL_DIR)</GameDir>
     <Managed>$(GameDir)\ULTRAKILL_Data\Managed</Managed>
   </PropertyGroup>
   <ItemGroup>
@@ -37,6 +38,14 @@
     <Reference Include="Unity.Addressables"><HintPath>$(Managed)\Unity.Addressables.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.ResourceManager"><HintPath>$(Managed)\Unity.ResourceManager.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+  <Target Name="CheckGameDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(GameDir)' == ''"
+           Text="No ULTRAKILL folder: pass -p:GameDir=&quot;&lt;folder containing ULTRAKILL.exe&gt;&quot; or set the ULTRAKILL_DIR environment variable." />
+    <Error Condition="!Exists('$(GameDir)\ULTRAKILL_Data\Managed\Assembly-CSharp.dll')"
+           Text="'$(GameDir)' is not an ULTRAKILL folder: ULTRAKILL_Data\Managed\Assembly-CSharp.dll not found." />
+    <Error Condition="!Exists('$(GameDir)\BepInEx\core\BepInEx.dll')"
+           Text="BepInEx 5 is not installed in '$(GameDir)': unzip BepInEx_win_x64_5.4.x into that folder first, start the game once, then close it." />
+  </Target>
   <Target Name="Deploy" AfterTargets="Build">
     <Copy SourceFiles="$(OutputPath)UltraBridge.dll" DestinationFolder="$(GameDir)\BepInEx\plugins\UltraBridge" />
   </Target>
